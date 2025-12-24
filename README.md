@@ -8,7 +8,7 @@ Unlike static benchmarks (like MMLU or MATH) that test questions in isolation, t
 
 ---
 
-## 🎮 The Game Mechanics
+##  The Game Mechanics
 
 ### The Objective
 The agent must traverse an **8x8 Grid** from Start (**A1**) to Finish (**H8**).
