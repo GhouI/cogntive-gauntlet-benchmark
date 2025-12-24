@@ -1,9 +1,15 @@
 // ============================================================================
-// SCORING SYSTEM
+// SCORING SYSTEM - MULTI-STAGE
 // ============================================================================
 
-import type { GameState, GameScore, SubScores } from '../types/index.js';
-import { shortestPathDistance, GOAL, START, manhattanDistance } from './board.js';
+import type { 
+  GameState, 
+  GameScore, 
+  SubScores, 
+  MultiStageGameState,
+} from '../types/index.js';
+import { shortestPathDistance, GOAL, START } from './board.js';
+import { STAGE_COMPLETION_BONUS, BOSS_DEFEAT_BONUS } from './stages.js';
 
 // ----------------------------------------------------------------------------
 // Score Calculation
@@ -171,4 +177,78 @@ export function getScoreSummary(score: GameScore): string {
     `Rule Adherence: ${score.subScores.ruleAdherence}%`,
     `Domain Accuracy: ${score.subScores.domainAccuracy}%`,
   ].join('\n');
+}
+
+// ----------------------------------------------------------------------------
+// Multi-Stage Score Calculation
+// ----------------------------------------------------------------------------
+
+export interface MultiStageScore {
+  totalScore: number;
+  stageScores: number[];
+  stageBonuses: number[];
+  bossBonus: number;
+  accuracy: number;
+  planningScore: number;
+  ruleScore: number;
+}
+
+export function calculateMultiStageScore(state: MultiStageGameState): MultiStageScore {
+  let totalScore = 0;
+  const stageScores: number[] = [];
+  const stageBonuses: number[] = [];
+  
+  // Calculate score for each stage
+  for (const stageResult of state.stages) {
+    // Base score for the stage (simplified - based on progress and questions)
+    const baseScore = stageResult.questionsCorrect * 20;
+    stageScores.push(baseScore);
+    stageBonuses.push(stageResult.bonus);
+    totalScore += baseScore + stageResult.bonus;
+  }
+  
+  // Boss bonus
+  const bossBonus = state.bossDefeated ? BOSS_DEFEAT_BONUS : 0;
+  totalScore += bossBonus;
+  
+  // Accuracy
+  const accuracy = state.totalQuestionsAnswered > 0 
+    ? Math.round((state.totalQuestionsCorrect / state.totalQuestionsAnswered) * 100)
+    : 0;
+  
+  // Planning score (average across stages)
+  let planningTotal = 0;
+  let stagesWithPlanning = 0;
+  for (const stageResult of state.stages) {
+    if (stageResult.completed) {
+      planningTotal += 100; // Full marks for completing
+    } else {
+      // Partial credit
+      planningTotal += 50;
+    }
+    stagesWithPlanning++;
+  }
+  const planningScore = stagesWithPlanning > 0 
+    ? Math.round(planningTotal / stagesWithPlanning)
+    : 0;
+  
+  // Rule adherence (based on total errors across all stages)
+  // Estimate from stage data
+  let totalErrors = 0;
+  for (const stageResult of state.stages) {
+    totalErrors += stageResult.questionsAnswered - stageResult.questionsCorrect;
+  }
+  const ruleScore = state.totalTurns > 0
+    ? Math.round(((state.totalTurns - totalErrors) / state.totalTurns) * 100)
+    : 0;
+  
+  return {
+    totalScore,
+    stageScores,
+    stageBonuses,
+    bossBonus,
+    accuracy,
+    planningScore: Math.min(100, Math.max(0, planningScore)),
+    ruleScore: Math.min(100, Math.max(0, ruleScore)),
+  };
 }

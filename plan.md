@@ -151,3 +151,86 @@ Contains:
 - Question asked, answer given, correct answer
 - Result (correct/incorrect/illegal move/invalid JSON)
 - Footer with final stats
+
+---
+
+## Multi-Stage Implementation (v2)
+
+### Overview
+The benchmark now features a **4-stage challenge** where models must:
+1. Complete 4 consecutive 8x8 grids
+2. Lives carry over between stages (no reset!)
+3. Face a **Boss Fight** at the end of Stage 4
+4. All questions are **Tier 3** (maximum difficulty)
+
+### Stages
+
+| Stage | Name | Void Pattern | Boss |
+|-------|------|--------------|------|
+| 1 | The Awakening | Scattered | No |
+| 2 | The Labyrinth | Corridor | No |
+| 3 | The Maze | Maze | No |
+| 4 | The Final Stand | Fortress | Yes |
+
+### Void Patterns
+- **Scattered**: 8 random voids spread across the board
+- **Corridor**: Vertical barriers with gaps creating narrow pathways
+- **Maze**: L-shaped barriers and dead ends
+- **Fortress**: Dense voids protecting the goal at H8
+
+### Boss Fight Mechanics
+- Triggered upon reaching H8 on Stage 4
+- Model receives **3 questions simultaneously** (math, physics, logic)
+- Must answer **ALL 3 correctly** in a single JSON response
+- Any wrong answer = Boss wins, game over
+- All correct = Boss defeated, complete victory!
+
+### Scoring (Multi-Stage)
+```
+Stage Score = Questions Correct × 20
+Stage Completion Bonus = 100 × Stage Number (100, 200, 300, 400)
+Boss Defeat Bonus = 500
+
+Total Score = Sum(Stage Scores) + Sum(Stage Bonuses) + Boss Bonus
+```
+
+### Terminal Output
+```
+╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║                                    COGNITIVE GAUNTLET - MULTI-STAGE RESULTS                                       ║
+╠═══════════════════════════════╦═══════╦═══════╦══════════╦══════════╦══════════╦════════╦════════╦════════╦═══════╣
+║ Model                         ║ Score ║ Stage ║ Lives    ║ Accuracy ║ Planning ║ Rules  ║ Time   ║ Cost   ║ Boss  ║
+╠═══════════════════════════════╬═══════╬═══════╬══════════╬══════════╬══════════╬════════╬════════╬════════╬═══════╣
+║ claude-3.5-sonnet             ║ 1850  ║ 4/4   ║ 2/5      ║ 87%      ║ 92%      ║ 95%    ║ 3m 45s ║ $0.12  ║ ✓ WIN ║
+║ gpt-4o                        ║ 1420  ║ 4/4   ║ 0/5      ║ 82%      ║ 88%      ║ 90%    ║ 2m 38s ║ $0.09  ║ ✗ LOSS║
+║ gemini-2.0-flash              ║ 680   ║ 2/4   ║ 0/5      ║ 65%      ║ 70%      ║ 88%    ║ 1m 22s ║ $0.02  ║ -     ║
+╚═══════════════════════════════╩═══════╩═══════╩══════════╩══════════╩══════════╩════════╩════════╩════════╩═══════╝
+
+Stage Breakdown:
+┌───────────────────────────────┬─────────┬─────────┬─────────┬─────────────────┐
+│ Model                         │ Stage 1 │ Stage 2 │ Stage 3 │ Stage 4         │
+├───────────────────────────────┼─────────┼─────────┼─────────┼─────────────────┤
+│ claude-3.5-sonnet             │ ✓ +100  │ ✓ +200  │ ✓ +300  │ ✓ +900 (Boss!)  │
+│ gpt-4o                        │ ✓ +100  │ ✓ +200  │ ✓ +300  │ H8 (Boss ✗)     │
+│ gemini-2.0-flash              │ ✓ +100  │ E4 ☠    │ -       │ -               │
+└───────────────────────────────┴─────────┴─────────┴─────────┴─────────────────┘
+```
+
+### Questions
+- **20 Tier 3 questions** (4 per domain: math, physics, code, logic, medicine)
+- **3 Boss questions** (math, physics, logic) for the final confrontation
+- All questions are extremely difficult - no easy mode!
+
+### Files Modified for Multi-Stage
+| File | Changes |
+|------|---------|
+| `src/types/index.ts` | Added Stage, BossFight, MultiStageGameState types |
+| `src/game/stages.ts` | NEW - Stage configuration and bonuses |
+| `src/game/board.ts` | Void pattern generation per stage |
+| `src/game/questions.ts` | All Tier 3, 20 questions + 3 boss questions |
+| `src/api/openrouter.ts` | Multi-stage prompts, boss fight prompt |
+| `src/game/engine.ts` | Multi-stage game loop, boss fight logic |
+| `src/game/scoring.ts` | Stage bonuses, accumulated scoring |
+| `src/output/table.ts` | Stage column, breakdown table |
+| `src/output/logger.ts` | Stage transitions, boss fight logs |
+| `src/index.ts` | Multi-stage benchmark orchestration |

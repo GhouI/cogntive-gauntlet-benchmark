@@ -1,22 +1,22 @@
 // ============================================================================
-// COGNITIVE GAUNTLET - MAIN ENTRY POINT
+// COGNITIVE GAUNTLET - MAIN ENTRY POINT (MULTI-STAGE)
 // ============================================================================
 
 import 'dotenv/config';
 import chalk from 'chalk';
 
-import { MODELS } from './config/models.js';
-import { runGame } from './game/engine.js';
-import { calculateScore } from './game/scoring.js';
-import { generateBoard, visualizeBoard } from './game/board.js';
-import { createLogger } from './output/logger.js';
+import { MODELS, getModelDisplayName } from './config/models.js';
+import { runMultiStageGame } from './game/engine.js';
+import { calculateMultiStageScore } from './game/scoring.js';
+import { generateStageBoard, visualizeBoard } from './game/board.js';
+import { createMultiStageLogger } from './output/logger.js';
 import { 
-  renderFullReport, 
+  renderMultiStageFullReport, 
   renderModelStart, 
-  renderModelComplete 
+  renderModelComplete,
 } from './output/table.js';
-import type { ModelResult, BenchmarkResult } from './types/index.js';
-import { getModelDisplayName } from './config/models.js';
+import { STAGES, getStageSeed } from './game/stages.js';
+import type { MultiStageModelResult, MultiStageBenchmarkResult } from './types/index.js';
 
 // ----------------------------------------------------------------------------
 // Banner
@@ -24,25 +24,26 @@ import { getModelDisplayName } from './config/models.js';
 
 function printBanner(): void {
   console.log(chalk.cyan(`
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                                                                               ║
-║     ██████╗ ██████╗  ██████╗ ███╗   ██╗██╗████████╗██╗██╗   ██╗███████╗      ║
-║    ██╔════╝██╔═══██╗██╔════╝ ████╗  ██║██║╚══██╔══╝██║██║   ██║██╔════╝      ║
-║    ██║     ██║   ██║██║  ███╗██╔██╗ ██║██║   ██║   ██║██║   ██║█████╗        ║
-║    ██║     ██║   ██║██║   ██║██║╚██╗██║██║   ██║   ██║╚██╗ ██╔╝██╔══╝        ║
-║    ╚██████╗╚██████╔╝╚██████╔╝██║ ╚████║██║   ██║   ██║ ╚████╔╝ ███████╗      ║
-║     ╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═╝   ╚═╝   ╚═╝  ╚═══╝  ╚══════╝      ║
-║                                                                               ║
-║                    ██████╗  █████╗ ██╗   ██╗███╗   ██╗████████╗██╗     ███████╗████████╗    ║
-║                   ██╔════╝ ██╔══██╗██║   ██║████╗  ██║╚══██╔══╝██║     ██╔════╝╚══██╔══╝    ║
-║                   ██║  ███╗███████║██║   ██║██╔██╗ ██║   ██║   ██║     █████╗     ██║       ║
-║                   ██║   ██║██╔══██║██║   ██║██║╚██╗██║   ██║   ██║     ██╔══╝     ██║       ║
-║                   ╚██████╔╝██║  ██║╚██████╔╝██║ ╚████║   ██║   ███████╗███████╗   ██║       ║
-║                    ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚══════╝   ╚═╝       ║
-║                                                                               ║
-║                        AI Model Evaluation Benchmark                          ║
-║                                                                               ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                       ║
+║   ██████╗ ██████╗  ██████╗ ███╗   ██╗██╗████████╗██╗██╗   ██╗███████╗                ║
+║  ██╔════╝██╔═══██╗██╔════╝ ████╗  ██║██║╚══██╔══╝██║██║   ██║██╔════╝                ║
+║  ██║     ██║   ██║██║  ███╗██╔██╗ ██║██║   ██║   ██║██║   ██║█████╗                  ║
+║  ██║     ██║   ██║██║   ██║██║╚██╗██║██║   ██║   ██║╚██╗ ██╔╝██╔══╝                  ║
+║  ╚██████╗╚██████╔╝╚██████╔╝██║ ╚████║██║   ██║   ██║ ╚████╔╝ ███████╗                ║
+║   ╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═╝   ╚═╝   ╚═╝  ╚═══╝  ╚══════╝                ║
+║                                                                                       ║
+║   ██████╗  █████╗ ██╗   ██╗███╗   ██╗████████╗██╗     ███████╗████████╗              ║
+║  ██╔════╝ ██╔══██╗██║   ██║████╗  ██║╚══██╔══╝██║     ██╔════╝╚══██╔══╝              ║
+║  ██║  ███╗███████║██║   ██║██╔██╗ ██║   ██║   ██║     █████╗     ██║                 ║
+║  ██║   ██║██╔══██║██║   ██║██║╚██╗██║   ██║   ██║     ██╔══╝     ██║                 ║
+║  ╚██████╔╝██║  ██║╚██████╔╝██║ ╚████║   ██║   ███████╗███████╗   ██║                 ║
+║   ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚══════╝   ╚═╝                 ║
+║                                                                                       ║
+║                    MULTI-STAGE AI MODEL EVALUATION BENCHMARK                          ║
+║                         4 Stages + Boss Fight | All Tier 3                            ║
+║                                                                                       ║
+╚═══════════════════════════════════════════════════════════════════════════════════════╝
 `));
 }
 
@@ -79,21 +80,35 @@ async function runBenchmark(): Promise<void> {
   printBanner();
   validateEnvironment();
   
-  // Generate a random seed for this benchmark run
-  const seed = Math.floor(Math.random() * 1000000);
+  // Generate a random base seed for this benchmark run
+  const baseSeed = Math.floor(Math.random() * 1000000);
   const timestamp = new Date().toISOString();
   
   console.log(chalk.cyan(`\n  Benchmark Configuration:`));
   console.log(chalk.gray(`  ─────────────────────────────────────────`));
-  console.log(chalk.white(`  Seed: ${chalk.bold(seed)}`));
+  console.log(chalk.white(`  Base Seed: ${chalk.bold(baseSeed)}`));
+  console.log(chalk.white(`  Stage Seeds: ${baseSeed} - ${baseSeed + 3}`));
   console.log(chalk.white(`  Models: ${chalk.bold(MODELS.length)}`));
-  console.log(chalk.white(`  Mode: Single Run`));
+  console.log(chalk.white(`  Mode: 4-Stage Challenge + Boss Fight`));
+  console.log(chalk.white(`  Difficulty: ALL TIER 3 (Maximum)`));
   console.log(chalk.gray(`  ─────────────────────────────────────────\n`));
   
-  // Show the board that will be used
-  const previewBoard = generateBoard(seed);
-  console.log(chalk.cyan(`  Board Preview (Seed: ${seed}):\n`));
-  console.log(visualizeBoard(previewBoard).split('\n').map(l => '  ' + l).join('\n'));
+  // Show stages overview
+  console.log(chalk.cyan(`  Stages:`));
+  for (const stage of STAGES) {
+    const bossIndicator = stage.hasBoss ? chalk.red(' [BOSS]') : '';
+    console.log(chalk.white(`    ${stage.number}. ${stage.name} (${stage.voidPattern})${bossIndicator}`));
+  }
+  console.log();
+  
+  // Show board previews for all stages
+  console.log(chalk.cyan(`  Board Previews:`));
+  for (const stage of STAGES) {
+    const stageSeed = getStageSeed(baseSeed, stage.number);
+    const board = generateStageBoard(stageSeed, stage.voidPattern);
+    console.log(chalk.yellow(`\n  Stage ${stage.number}: ${stage.name} (Seed: ${stageSeed})`));
+    console.log(visualizeBoard(board).split('\n').map(l => '    ' + l).join('\n'));
+  }
   console.log();
   
   // List models to be tested
@@ -104,21 +119,21 @@ async function runBenchmark(): Promise<void> {
   console.log();
   
   // Run benchmark for each model
-  const results: ModelResult[] = [];
+  const results: MultiStageModelResult[] = [];
   
   for (let i = 0; i < MODELS.length; i++) {
     const modelId = MODELS[i];
     console.log(renderModelStart(modelId, i + 1, MODELS.length));
     
     // Create logger for this model
-    const logger = createLogger(modelId, seed);
+    const logger = createMultiStageLogger(modelId, baseSeed);
     
     try {
-      // Run the game
-      const { state, apiUsage } = await runGame(modelId, seed, logger);
+      // Run the multi-stage game
+      const { state, apiUsage } = await runMultiStageGame(modelId, baseSeed, logger);
       
       // Calculate score
-      const score = calculateScore(state);
+      const scoreData = calculateMultiStageScore(state);
       
       // Save log file
       const logPath = logger.save();
@@ -127,13 +142,24 @@ async function runBenchmark(): Promise<void> {
       results.push({
         modelId,
         modelName: getModelDisplayName(modelId),
-        gameState: state,
-        score,
+        multiStageState: state,
+        totalScore: scoreData.totalScore,
+        stageReached: state.finalStage,
+        livesRemaining: state.lives,
+        accuracy: scoreData.accuracy,
+        planningScore: scoreData.planningScore,
+        ruleScore: scoreData.ruleScore,
+        bossDefeated: state.bossDefeated,
         apiUsage,
         logFilePath: logPath,
       });
       
-      console.log(renderModelComplete(modelId, state.won, score.total));
+      console.log(renderModelComplete(
+        modelId, 
+        state.finalStage, 
+        state.bossDefeated, 
+        scoreData.totalScore
+      ));
       
     } catch (error) {
       // API error - stop the benchmark
@@ -149,13 +175,13 @@ async function runBenchmark(): Promise<void> {
   
   // Display final results
   if (results.length > 0) {
-    const benchmarkResult: BenchmarkResult = {
-      seed,
+    const benchmarkResult: MultiStageBenchmarkResult = {
+      baseSeed,
       timestamp,
       results,
     };
     
-    console.log(renderFullReport(benchmarkResult));
+    console.log(renderMultiStageFullReport(benchmarkResult));
   } else {
     console.log(chalk.red('\n  No results to display.\n'));
   }

@@ -1,5 +1,5 @@
 // ============================================================================
-// GAME LOGGER - File-based logging for each model's game
+// GAME LOGGER - Multi-Stage File-based logging
 // ============================================================================
 
 import * as fs from 'fs';
@@ -9,22 +9,27 @@ import type {
   VisibleState, 
   ParsedMove, 
   Question,
+  Board,
+  StageResult,
+  BossFight,
+  MultiStageGameState,
 } from '../types/index.js';
 import { getModelDisplayName } from '../config/models.js';
+import { visualizeBoard } from '../game/board.js';
 
 // ----------------------------------------------------------------------------
-// Logger Class
+// Multi-Stage Logger Class
 // ----------------------------------------------------------------------------
 
-export class GameLogger {
+export class MultiStageLogger {
   private logPath: string;
   private buffer: string[] = [];
   private modelId: string;
-  private seed: number;
+  private baseSeed: number;
   
-  constructor(modelId: string, seed: number, logsDir = 'logs') {
+  constructor(modelId: string, baseSeed: number, logsDir = 'logs') {
     this.modelId = modelId;
-    this.seed = seed;
+    this.baseSeed = baseSeed;
     
     // Create logs directory if it doesn't exist
     if (!fs.existsSync(logsDir)) {
@@ -34,7 +39,7 @@ export class GameLogger {
     // Generate filename: model-name_seed_timestamp.log
     const sanitizedModel = modelId.replace(/[/\\:*?"<>|]/g, '-');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `${sanitizedModel}_${seed}_${timestamp}.log`;
+    const filename = `${sanitizedModel}_${baseSeed}_${timestamp}.log`;
     
     this.logPath = path.join(logsDir, filename);
   }
@@ -56,23 +61,61 @@ export class GameLogger {
   }
   
   // --------------------------------------------------------------------------
-  // Public Logging Methods
+  // Header
   // --------------------------------------------------------------------------
   
-  logHeader(modelId: string, seed: number): void {
+  logHeader(modelId: string, baseSeed: number): void {
     this.writeDivider('=');
-    this.writeLine('COGNITIVE GAUNTLET - GAME LOG');
+    this.writeLine('COGNITIVE GAUNTLET - MULTI-STAGE GAME LOG');
     this.writeDivider('=');
     this.writeLine(`Model: ${getModelDisplayName(modelId)}`);
     this.writeLine(`Model ID: ${modelId}`);
-    this.writeLine(`Seed: ${seed}`);
+    this.writeLine(`Base Seed: ${baseSeed}`);
     this.writeLine(`Started: ${new Date().toISOString()}`);
+    this.writeLine(`Mode: 4-Stage Challenge with Boss Fight`);
     this.writeDivider('=');
     this.writeLine();
   }
   
+  // --------------------------------------------------------------------------
+  // Stage Logging
+  // --------------------------------------------------------------------------
+  
+  logStageStart(stageNumber: number, stageName: string, board: Board): void {
+    this.writeLine();
+    this.writeDivider('=');
+    this.writeLine(`STAGE ${stageNumber}/4 - ${stageName.toUpperCase()}`);
+    this.writeDivider('=');
+    this.writeLine(`Board Seed: ${board.seed}`);
+    this.writeLine(`Voids: ${board.voids.size} squares`);
+    this.writeLine();
+    this.writeLine('Board Layout:');
+    this.writeLine(visualizeBoard(board));
+    this.writeLine();
+  }
+  
+  logStageEnd(stageNumber: number, state: GameState, result: StageResult): void {
+    this.writeLine();
+    this.writeDivider('-');
+    this.writeLine(`STAGE ${stageNumber} COMPLETE`);
+    this.writeDivider('-');
+    this.writeLine(`Result: ${result.completed ? 'COMPLETED' : 'FAILED'}`);
+    this.writeLine(`Final Position: ${result.finalPosition}`);
+    this.writeLine(`Turns Used: ${result.turnsUsed}`);
+    this.writeLine(`Questions: ${result.questionsCorrect}/${result.questionsAnswered}`);
+    this.writeLine(`Lives Remaining: ${state.lives}/5`);
+    if (result.bonus > 0) {
+      this.writeLine(`Stage Bonus: +${result.bonus}`);
+    }
+    this.writeLine();
+  }
+  
+  // --------------------------------------------------------------------------
+  // Turn Logging
+  // --------------------------------------------------------------------------
+  
   logTurnStart(state: GameState, visible: VisibleState): void {
-    this.writeLine(`--- TURN ${state.turn} ---`);
+    this.writeLine(`--- STAGE ${visible.stage} | TURN ${state.turn} ---`);
     this.writeLine(`Position: ${state.currentPosition}`);
     this.writeLine(`Lives: ${state.lives}/5`);
     this.writeLine(`Distance to Goal: ${visible.distanceToGoal} squares`);
@@ -110,7 +153,7 @@ export class GameLogger {
     this.writeLine(`Penalty: -1 life`);
     this.writeLine(`Lives Remaining: ${livesRemaining}/5`);
     this.writeLine();
-    this.writeDivider('-');
+    this.writeDivider('-', 40);
     this.writeLine();
   }
   
@@ -120,7 +163,7 @@ export class GameLogger {
     this.writeLine(`Penalty: -1 life`);
     this.writeLine(`Lives Remaining: ${livesRemaining}/5`);
     this.writeLine();
-    this.writeDivider('-');
+    this.writeDivider('-', 40);
     this.writeLine();
   }
   
@@ -155,13 +198,17 @@ export class GameLogger {
     }
     this.writeLine(`Lives Remaining: ${livesRemaining}/5`);
     this.writeLine();
-    this.writeDivider('-');
+    this.writeDivider('-', 40);
     this.writeLine();
   }
   
-  logGoalReached(): void {
-    this.writeLine('*** GOAL REACHED - H8 ***');
-    this.writeLine('The model has successfully navigated to the goal!');
+  logGoalReached(stageNumber: number): void {
+    this.writeLine(`*** STAGE ${stageNumber} GOAL REACHED - H8 ***`);
+    if (stageNumber < 4) {
+      this.writeLine('Advancing to next stage...');
+    } else {
+      this.writeLine('All stages complete! Entering BOSS FIGHT...');
+    }
     this.writeLine();
   }
   
@@ -172,23 +219,94 @@ export class GameLogger {
     this.writeLine();
   }
   
-  logGameOver(state: GameState): void {
+  // --------------------------------------------------------------------------
+  // Boss Fight Logging
+  // --------------------------------------------------------------------------
+  
+  logBossFightStart(questions: Question[]): void {
+    this.writeLine();
+    this.writeDivider('*');
+    this.writeLine('BOSS FIGHT - THE FINAL STAND');
+    this.writeDivider('*');
+    this.writeLine();
+    this.writeLine('The Boss presents 3 questions that must ALL be answered correctly:');
+    this.writeLine();
+    
+    questions.forEach((q, i) => {
+      this.writeLine(`BOSS QUESTION ${i + 1} (${q.domain.toUpperCase()}):`);
+      this.writeLine(q.question.split('\n').map(l => '  ' + l).join('\n'));
+      this.writeLine(`  Answer Format: ${q.format}`);
+      this.writeLine();
+    });
+  }
+  
+  logBossFightEnd(bossFight: BossFight): void {
+    this.writeLine('Model Boss Fight Response:');
+    this.writeLine(`  Reasoning: ${bossFight.modelReasoning.substring(0, 300)}${bossFight.modelReasoning.length > 300 ? '...' : ''}`);
+    this.writeLine();
+    
+    this.writeLine('Results:');
+    bossFight.questions.forEach((q, i) => {
+      const status = bossFight.correct[i] ? '✓ CORRECT' : '✗ INCORRECT';
+      this.writeLine(`  Question ${i + 1}: ${status}`);
+      this.writeLine(`    Model Answer: ${bossFight.modelAnswers[i]}`);
+      this.writeLine(`    Correct Answer: ${q.answer}`);
+    });
+    this.writeLine();
+    
+    if (bossFight.defeated) {
+      this.writeDivider('*');
+      this.writeLine('*** BOSS DEFEATED! VICTORY! ***');
+      this.writeDivider('*');
+    } else {
+      this.writeLine('BOSS WINS - Not all questions answered correctly');
+    }
+    this.writeLine();
+  }
+  
+  // --------------------------------------------------------------------------
+  // Game Over
+  // --------------------------------------------------------------------------
+  
+  logGameOver(state: MultiStageGameState): void {
     this.writeLine();
     this.writeDivider('=');
-    this.writeLine('GAME OVER');
+    this.writeLine('GAME OVER - FINAL RESULTS');
     this.writeDivider('=');
     this.writeLine();
-    this.writeLine(`Final Position: ${state.currentPosition}`);
-    this.writeLine(`Result: ${state.won ? 'VICTORY' : 'DEFEAT'}`);
-    this.writeLine(`Turns Taken: ${state.turn}`);
-    this.writeLine(`Lives Remaining: ${state.lives}/5`);
+    
+    // Overall result
+    if (state.bossDefeated) {
+      this.writeLine('RESULT: COMPLETE VICTORY!');
+      this.writeLine('All 4 stages completed and Boss defeated!');
+    } else if (state.finalStage === 4 && state.stages[3]?.completed) {
+      this.writeLine('RESULT: BOSS DEFEATED YOU');
+      this.writeLine('Reached the Boss but failed to answer all questions correctly.');
+    } else {
+      this.writeLine(`RESULT: DEFEATED AT STAGE ${state.finalStage}`);
+      this.writeLine('Ran out of lives before completing all stages.');
+    }
     this.writeLine();
-    this.writeLine('Statistics:');
-    this.writeLine(`  Questions Answered: ${state.questionsAnswered}`);
-    this.writeLine(`  Questions Correct: ${state.questionsCorrect}`);
-    this.writeLine(`  Accuracy: ${state.questionsAnswered > 0 ? Math.round((state.questionsCorrect / state.questionsAnswered) * 100) : 0}%`);
-    this.writeLine(`  Illegal Moves: ${state.illegalMoves}`);
-    this.writeLine(`  Invalid JSON: ${state.invalidJsonCount}`);
+    
+    // Stage breakdown
+    this.writeLine('Stage Breakdown:');
+    for (const stage of state.stages) {
+      const status = stage.completed ? '✓' : '✗';
+      this.writeLine(`  Stage ${stage.stage} (${stage.stageName}): ${status}`);
+      this.writeLine(`    Position: ${stage.finalPosition}`);
+      this.writeLine(`    Questions: ${stage.questionsCorrect}/${stage.questionsAnswered}`);
+      this.writeLine(`    Bonus: ${stage.bonus}`);
+    }
+    this.writeLine();
+    
+    // Totals
+    this.writeLine('Totals:');
+    this.writeLine(`  Stages Completed: ${state.stages.filter(s => s.completed).length}/${state.stages.length}`);
+    this.writeLine(`  Total Turns: ${state.totalTurns}`);
+    this.writeLine(`  Questions: ${state.totalQuestionsCorrect}/${state.totalQuestionsAnswered}`);
+    this.writeLine(`  Accuracy: ${state.totalQuestionsAnswered > 0 ? Math.round((state.totalQuestionsCorrect / state.totalQuestionsAnswered) * 100) : 0}%`);
+    this.writeLine(`  Lives Remaining: ${state.lives}/5`);
+    this.writeLine(`  Boss Defeated: ${state.bossDefeated ? 'Yes' : 'No'}`);
     this.writeLine();
     
     const elapsed = Date.now() - state.startTime;
@@ -216,6 +334,6 @@ export class GameLogger {
 // Factory Function
 // ----------------------------------------------------------------------------
 
-export function createLogger(modelId: string, seed: number): GameLogger {
-  return new GameLogger(modelId, seed);
+export function createMultiStageLogger(modelId: string, baseSeed: number): MultiStageLogger {
+  return new MultiStageLogger(modelId, baseSeed);
 }

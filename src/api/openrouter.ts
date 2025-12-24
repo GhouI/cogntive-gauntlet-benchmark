@@ -211,3 +211,111 @@ ${question.format === 'string' ? `(Provide a single word or short phrase)` : ''}
 
 Your entire response must be valid JSON.`;
 }
+
+// ----------------------------------------------------------------------------
+// Build Multi-Stage System Prompt
+// ----------------------------------------------------------------------------
+
+export function buildMultiStageSystemPrompt(stageNumber: number, stageName: string): string {
+  return `You are playing Cognitive Gauntlet, a multi-stage 8x8 grid traversal challenge.
+
+CURRENT STAGE: ${stageNumber}/4 - "${stageName}"
+
+OBJECTIVE: Navigate from A1 to H8 on each stage. Complete all 4 stages to face the Final Boss.
+
+RULES:
+1. You have 5 lives total across ALL stages - lives carry over!
+2. Each square has an EXTREMELY HARD question (Tier 3 only). Answer correctly to occupy it.
+3. Wrong answer: lose 1 life, stay on current square.
+4. Illegal move: lose 1 life, stay on current square.
+5. Game over at 0 lives.
+6. Reach H8 to complete the stage and advance.
+
+AVATARS (movement types):
+- Vector: Move exactly 2 squares orthogonally (up, down, left, right)
+- Bias: Move exactly 1 square diagonally
+- Tensor: Move in L-shape (2 squares one direction, 1 square perpendicular)
+- Scalar: Move exactly 1 square in any direction (including diagonal)
+- Epoch: Move exactly 3 squares forward (toward row 8 only)
+
+COOLDOWN: You cannot use the same avatar twice in a row.
+
+COORDINATE SYSTEM:
+- Columns: A-H (left to right)
+- Rows: 1-8 (bottom to top)
+- A1 is bottom-left, H8 is top-right
+
+FOG OF WAR: You can only see the category of adjacent squares, not the questions.
+
+RESPONSE FORMAT: You MUST respond with valid JSON only:
+{
+  "reasoning": "Your strategic thinking about the move",
+  "avatar": "AvatarName",
+  "target": "TargetCoordinate"
+}
+
+IMPORTANT: Your entire response must be valid JSON. Do not include any text before or after the JSON.`;
+}
+
+// ----------------------------------------------------------------------------
+// Build Stage Turn Prompt
+// ----------------------------------------------------------------------------
+
+export function buildStageTurnPrompt(state: VisibleState): string {
+  const neighbors = state.visibleNeighbors
+    .map(n => `  ${n.coordinate}: [${n.domain}]`)
+    .join('\n');
+
+  const avatars = state.availableAvatars.join(', ');
+  const cooldown = state.lastUsedAvatar 
+    ? `(${state.lastUsedAvatar} on cooldown)` 
+    : '(none on cooldown)';
+
+  return `STAGE ${state.stage}/4 - "${state.stageName}" | TURN ${state.turn}
+
+Current Position: ${state.currentPosition}
+Lives: ${state.lives}/5 (carries over between stages!)
+Distance to Goal (H8): ${state.distanceToGoal} squares
+
+Available Avatars: ${avatars} ${cooldown}
+
+Visible Neighbors (category only):
+${neighbors}
+
+Choose your move. Respond with JSON only.`;
+}
+
+// ----------------------------------------------------------------------------
+// Build Boss Fight Prompt
+// ----------------------------------------------------------------------------
+
+export function buildBossFightPrompt(questions: Question[]): string {
+  const questionTexts = questions.map((q, i) => 
+    `QUESTION ${i + 1} (${q.domain.toUpperCase()}):\n${q.question}\nAnswer format: ${q.format}`
+  ).join('\n\n');
+
+  return `
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         BOSS FIGHT - THE FINAL STAND                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+You have reached H8 on Stage 4. The BOSS awaits.
+
+To defeat the Boss and complete the Cognitive Gauntlet, you must answer 
+ALL THREE questions correctly in a SINGLE response.
+
+Any incorrect answer means defeat - the Boss wins.
+
+${questionTexts}
+
+RESPONSE FORMAT: You MUST respond with valid JSON:
+{
+  "reasoning": "Your approach to solving all three questions",
+  "answer1": "Your answer to question 1",
+  "answer2": "Your answer to question 2",
+  "answer3": "Your answer to question 3"
+}
+
+This is your ONLY chance. Answer all three correctly to achieve victory.
+Your entire response must be valid JSON.`;
+}

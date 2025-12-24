@@ -1,10 +1,10 @@
 // ============================================================================
-// TERMINAL TABLE OUTPUT
+// TERMINAL TABLE OUTPUT - MULTI-STAGE
 // ============================================================================
 
 import Table from 'cli-table3';
 import chalk from 'chalk';
-import type { ModelResult, BenchmarkResult } from '../types/index.js';
+import type { MultiStageModelResult, MultiStageBenchmarkResult } from '../types/index.js';
 import { getModelDisplayName } from '../config/models.js';
 
 // ----------------------------------------------------------------------------
@@ -26,16 +26,12 @@ function formatCost(cost: number): string {
 
 function formatTime(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60000).toFixed(1)}m`;
 }
 
 function formatPercentage(value: number): string {
   return `${value}%`;
-}
-
-function formatProgress(position: string, won: boolean): string {
-  if (won) return chalk.green(`${position} ✓`);
-  return chalk.yellow(position);
 }
 
 function formatLives(remaining: number): string {
@@ -44,19 +40,31 @@ function formatLives(remaining: number): string {
   return chalk.green(`${remaining}/5`);
 }
 
+function formatStage(stageReached: number, bossDefeated: boolean): string {
+  if (bossDefeated) return chalk.green(`4/4 ✓`);
+  if (stageReached === 4) return chalk.yellow(`4/4 (Boss ✗)`);
+  return chalk.yellow(`${stageReached}/4`);
+}
+
+function formatBoss(bossDefeated: boolean, stageReached: number): string {
+  if (stageReached < 4) return chalk.dim('-');
+  if (bossDefeated) return chalk.green('✓ WIN');
+  return chalk.red('✗ LOSS');
+}
+
 // ----------------------------------------------------------------------------
 // Main Results Table
 // ----------------------------------------------------------------------------
 
-export function renderResultsTable(results: BenchmarkResult): string {
+export function renderMultiStageResultsTable(results: MultiStageBenchmarkResult): string {
   const output: string[] = [];
   
   // Header
   output.push('');
-  output.push(chalk.bold.cyan('═'.repeat(100)));
-  output.push(chalk.bold.cyan(`  COGNITIVE GAUNTLET - BENCHMARK RESULTS`));
-  output.push(chalk.bold.cyan(`  Seed: ${results.seed} | ${results.timestamp}`));
-  output.push(chalk.bold.cyan('═'.repeat(100)));
+  output.push(chalk.bold.cyan('═'.repeat(115)));
+  output.push(chalk.bold.cyan(`                           COGNITIVE GAUNTLET - MULTI-STAGE RESULTS`));
+  output.push(chalk.bold.cyan(`                           Seeds: ${results.baseSeed}-${results.baseSeed + 3} | ${results.timestamp}`));
+  output.push(chalk.bold.cyan('═'.repeat(115)));
   output.push('');
   
   // Main results table
@@ -64,15 +72,16 @@ export function renderResultsTable(results: BenchmarkResult): string {
     head: [
       chalk.bold('Model'),
       chalk.bold('Score'),
+      chalk.bold('Stage'),
       chalk.bold('Lives'),
-      chalk.bold('Progress'),
       chalk.bold('Accuracy'),
       chalk.bold('Planning'),
       chalk.bold('Rules'),
       chalk.bold('Time'),
       chalk.bold('Cost'),
+      chalk.bold('Boss'),
     ],
-    colWidths: [28, 8, 8, 12, 10, 10, 8, 10, 10],
+    colWidths: [26, 8, 12, 8, 10, 10, 8, 10, 10, 10],
     style: {
       head: [],
       border: [],
@@ -80,24 +89,25 @@ export function renderResultsTable(results: BenchmarkResult): string {
   });
   
   // Sort by score descending
-  const sortedResults = [...results.results].sort((a, b) => b.score.total - a.score.total);
+  const sortedResults = [...results.results].sort((a, b) => b.totalScore - a.totalScore);
   
   for (const result of sortedResults) {
     const displayName = getModelDisplayName(result.modelId);
-    const truncatedName = displayName.length > 26 
-      ? displayName.substring(0, 23) + '...' 
+    const truncatedName = displayName.length > 24 
+      ? displayName.substring(0, 21) + '...' 
       : displayName;
     
     mainTable.push([
       truncatedName,
-      chalk.bold(formatNumber(result.score.total)),
-      formatLives(result.score.livesRemaining),
-      formatProgress(result.gameState.currentPosition, result.gameState.won),
-      formatPercentage(result.score.subScores.domainAccuracy),
-      formatPercentage(result.score.subScores.planning),
-      formatPercentage(result.score.subScores.ruleAdherence),
+      chalk.bold(formatNumber(result.totalScore)),
+      formatStage(result.stageReached, result.bossDefeated),
+      formatLives(result.livesRemaining),
+      formatPercentage(result.accuracy),
+      formatPercentage(result.planningScore),
+      formatPercentage(result.ruleScore),
       formatTime(result.apiUsage.totalTimeMs),
       formatCost(result.apiUsage.totalCost),
+      formatBoss(result.bossDefeated, result.stageReached),
     ]);
   }
   
@@ -108,10 +118,74 @@ export function renderResultsTable(results: BenchmarkResult): string {
 }
 
 // ----------------------------------------------------------------------------
+// Stage Breakdown Table
+// ----------------------------------------------------------------------------
+
+export function renderStageBreakdown(results: MultiStageBenchmarkResult): string {
+  const output: string[] = [];
+  
+  output.push(chalk.bold.cyan('  STAGE BREAKDOWN'));
+  output.push(chalk.bold.cyan('─'.repeat(90)));
+  output.push('');
+  
+  const stageTable = new Table({
+    head: [
+      chalk.bold('Model'),
+      chalk.bold('Stage 1'),
+      chalk.bold('Stage 2'),
+      chalk.bold('Stage 3'),
+      chalk.bold('Stage 4'),
+    ],
+    colWidths: [26, 16, 16, 16, 20],
+    style: {
+      head: [],
+      border: [],
+    },
+  });
+  
+  const sortedResults = [...results.results].sort((a, b) => b.totalScore - a.totalScore);
+  
+  for (const result of sortedResults) {
+    const displayName = getModelDisplayName(result.modelId);
+    const truncatedName = displayName.length > 24 
+      ? displayName.substring(0, 21) + '...' 
+      : displayName;
+    
+    const stageCells: string[] = [];
+    
+    for (let i = 0; i < 4; i++) {
+      const stage = result.multiStageState.stages[i];
+      if (!stage) {
+        stageCells.push(chalk.dim('-'));
+      } else if (stage.completed) {
+        if (i === 3 && stage.bossAttempted) {
+          if (stage.bossDefeated) {
+            stageCells.push(chalk.green(`✓ +${stage.bonus}`));
+          } else {
+            stageCells.push(chalk.yellow(`H8 (Boss ✗)`));
+          }
+        } else {
+          stageCells.push(chalk.green(`✓ +${stage.bonus}`));
+        }
+      } else {
+        stageCells.push(chalk.red(`${stage.finalPosition} ☠`));
+      }
+    }
+    
+    stageTable.push([truncatedName, ...stageCells]);
+  }
+  
+  output.push(stageTable.toString());
+  output.push('');
+  
+  return output.join('\n');
+}
+
+// ----------------------------------------------------------------------------
 // Token Usage Table
 // ----------------------------------------------------------------------------
 
-export function renderTokenTable(results: BenchmarkResult): string {
+export function renderMultiStageTokenTable(results: MultiStageBenchmarkResult): string {
   const output: string[] = [];
   
   output.push(chalk.bold.cyan('  TOKEN USAGE'));
@@ -125,20 +199,19 @@ export function renderTokenTable(results: BenchmarkResult): string {
       chalk.bold('Output'),
       chalk.bold('Total'),
     ],
-    colWidths: [28, 14, 14, 14],
+    colWidths: [26, 14, 14, 14],
     style: {
       head: [],
       border: [],
     },
   });
   
-  // Sort by score descending (same order as main table)
-  const sortedResults = [...results.results].sort((a, b) => b.score.total - a.score.total);
+  const sortedResults = [...results.results].sort((a, b) => b.totalScore - a.totalScore);
   
   for (const result of sortedResults) {
     const displayName = getModelDisplayName(result.modelId);
-    const truncatedName = displayName.length > 26 
-      ? displayName.substring(0, 23) + '...' 
+    const truncatedName = displayName.length > 24 
+      ? displayName.substring(0, 21) + '...' 
       : displayName;
     
     tokenTable.push([
@@ -156,90 +229,23 @@ export function renderTokenTable(results: BenchmarkResult): string {
 }
 
 // ----------------------------------------------------------------------------
-// Detailed Stats Table
+// Full Multi-Stage Report
 // ----------------------------------------------------------------------------
 
-export function renderDetailedStats(results: BenchmarkResult): string {
+export function renderMultiStageFullReport(results: MultiStageBenchmarkResult): string {
   const output: string[] = [];
   
-  output.push(chalk.bold.cyan('  DETAILED STATISTICS'));
-  output.push(chalk.bold.cyan('─'.repeat(90)));
-  output.push('');
-  
-  const detailTable = new Table({
-    head: [
-      chalk.bold('Model'),
-      chalk.bold('Turns'),
-      chalk.bold('Q. Asked'),
-      chalk.bold('Q. Correct'),
-      chalk.bold('Illegal'),
-      chalk.bold('Bad JSON'),
-      chalk.bold('Errors'),
-    ],
-    colWidths: [28, 8, 10, 12, 10, 10, 10],
-    style: {
-      head: [],
-      border: [],
-    },
-  });
-  
-  const sortedResults = [...results.results].sort((a, b) => b.score.total - a.score.total);
-  
-  for (const result of sortedResults) {
-    const displayName = getModelDisplayName(result.modelId);
-    const truncatedName = displayName.length > 26 
-      ? displayName.substring(0, 23) + '...' 
-      : displayName;
-    
-    const state = result.gameState;
-    
-    detailTable.push([
-      truncatedName,
-      formatNumber(state.turn),
-      formatNumber(state.questionsAnswered),
-      formatNumber(state.questionsCorrect),
-      state.illegalMoves > 0 ? chalk.red(formatNumber(state.illegalMoves)) : '0',
-      state.invalidJsonCount > 0 ? chalk.red(formatNumber(state.invalidJsonCount)) : '0',
-      result.score.errors > 0 ? chalk.red(formatNumber(result.score.errors)) : '0',
-    ]);
-  }
-  
-  output.push(detailTable.toString());
-  output.push('');
-  
-  return output.join('\n');
-}
-
-// ----------------------------------------------------------------------------
-// Full Report
-// ----------------------------------------------------------------------------
-
-export function renderFullReport(results: BenchmarkResult): string {
-  const output: string[] = [];
-  
-  output.push(renderResultsTable(results));
-  output.push(renderTokenTable(results));
-  output.push(renderDetailedStats(results));
+  output.push(renderMultiStageResultsTable(results));
+  output.push(renderStageBreakdown(results));
+  output.push(renderMultiStageTokenTable(results));
   
   // Footer
-  output.push(chalk.dim('─'.repeat(100)));
+  output.push(chalk.dim('─'.repeat(115)));
   output.push(chalk.dim(`  Log files saved to: logs/`));
-  output.push(chalk.dim('─'.repeat(100)));
+  output.push(chalk.dim('─'.repeat(115)));
   output.push('');
   
   return output.join('\n');
-}
-
-// ----------------------------------------------------------------------------
-// Progress Indicator
-// ----------------------------------------------------------------------------
-
-export function renderProgress(modelId: string, current: number, total: number): string {
-  const displayName = getModelDisplayName(modelId);
-  const progress = Math.round((current / total) * 100);
-  const bar = '█'.repeat(Math.floor(progress / 5)) + '░'.repeat(20 - Math.floor(progress / 5));
-  
-  return chalk.cyan(`  [${bar}] ${progress}% - Running: ${displayName}`);
 }
 
 // ----------------------------------------------------------------------------
@@ -248,11 +254,34 @@ export function renderProgress(modelId: string, current: number, total: number):
 
 export function renderModelStart(modelId: string, index: number, total: number): string {
   const displayName = getModelDisplayName(modelId);
-  return chalk.cyan(`\n  [${index}/${total}] Starting benchmark for: ${chalk.bold(displayName)}\n`);
+  return chalk.cyan(`\n  [${index}/${total}] Starting multi-stage benchmark for: ${chalk.bold(displayName)}\n`);
 }
 
-export function renderModelComplete(modelId: string, won: boolean, score: number): string {
+export function renderModelComplete(
+  modelId: string, 
+  stageReached: number, 
+  bossDefeated: boolean, 
+  score: number
+): string {
   const displayName = getModelDisplayName(modelId);
-  const status = won ? chalk.green('WON') : chalk.yellow('LOST');
+  let status: string;
+  
+  if (bossDefeated) {
+    status = chalk.green('BOSS DEFEATED!');
+  } else if (stageReached === 4) {
+    status = chalk.yellow('Boss Fight Lost');
+  } else {
+    status = chalk.red(`Defeated at Stage ${stageReached}`);
+  }
+  
   return chalk.cyan(`  Completed: ${displayName} - ${status} - Score: ${chalk.bold(score)}\n`);
+}
+
+// ----------------------------------------------------------------------------
+// Stage Progress Message
+// ----------------------------------------------------------------------------
+
+export function renderStageProgress(modelId: string, stageNumber: number, stageName: string): string {
+  const displayName = getModelDisplayName(modelId);
+  return chalk.dim(`    Stage ${stageNumber}/4: ${stageName}...`);
 }
