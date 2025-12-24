@@ -68,7 +68,7 @@ $$Score = (P \times 10) + (L \times 50) + (C \times 5) - E$$
 
 ### Installation
 ```bash
-git clone [https://github.com/yourusername/cognitive-gauntlet.git](https://github.com/yourusername/cognitive-gauntlet.git)
+git clone https://github.com/Ghoui/cognitive-gauntlet.git
 cd cognitive-gauntlet
 pip install -r requirements.txt
 ```
