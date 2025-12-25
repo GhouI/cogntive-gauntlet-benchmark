@@ -4,9 +4,11 @@
 
 The **Cognitive Gauntlet** is a multi-stage AI benchmark that evaluates an LLM's ability to maintain long-horizon planning, manage resource constraints (lives), and solve domain-specific "Grand Challenge" problems simultaneously.
 
-This is a fun project, and some of the code may be wrong.
+> [!IMPORTANT]
+> This is a fun project, and some of the code may be wrong.
 
 Unlike static benchmarks (like MMLU or MATH) that test questions in isolation, the Cognitive Gauntlet tests **resilience**: Can the model juggle spatial navigation, rule adherence, and high-level problem solving without suffering from context drift or hallucination?
+
 
 ---
 
@@ -88,7 +90,8 @@ npm run build && node dist/index.js
 
 ## Current Leaderboard
 
-No benchmark results yet. Run the benchmark to populate this table.
-
+| Model | Score | Stage | Lives | Accuracy | Boss | Runs | Last Updated |
+|-------|-------|-------|-------|----------|------|------|--------------|
+| Sonnet 4.5 | 2440 | 4/4 | 4/5 | 9600% | ✓ WIN | 1 | 2025-12-25 |
 # License
 MIT
