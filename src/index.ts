@@ -9,7 +9,8 @@ import { MODELS, getModelDisplayName } from './config/models.js';
 import { runMultiStageGame } from './game/engine.js';
 import { calculateMultiStageScore } from './game/scoring.js';
 import { generateStageBoard, visualizeBoard } from './game/board.js';
-import { createMultiStageLogger } from './output/logger.js';
+import { createMultiStageLogger, generateRunTimestamp } from './output/logger.js';
+import { updateLeaderboard } from './output/leaderboard.js';
 import { 
   renderMultiStageFullReport, 
   renderModelStart, 
@@ -84,6 +85,9 @@ async function runBenchmark(): Promise<void> {
   const baseSeed = Math.floor(Math.random() * 1000000);
   const timestamp = new Date().toISOString();
   
+  // Generate a timestamp for log folder (shared across all models in this run)
+  const runTimestamp = generateRunTimestamp();
+  
   console.log(chalk.cyan(`\n  Benchmark Configuration:`));
   console.log(chalk.gray(`  ─────────────────────────────────────────`));
   console.log(chalk.white(`  Base Seed: ${chalk.bold(baseSeed)}`));
@@ -125,8 +129,8 @@ async function runBenchmark(): Promise<void> {
     const modelId = MODELS[i];
     console.log(renderModelStart(modelId, i + 1, MODELS.length));
     
-    // Create logger for this model
-    const logger = createMultiStageLogger(modelId, baseSeed);
+    // Create logger for this model (all models in this run share the same timestamp folder)
+    const logger = createMultiStageLogger(modelId, baseSeed, runTimestamp);
     
     try {
       // Run the multi-stage game
@@ -139,7 +143,7 @@ async function runBenchmark(): Promise<void> {
       const logPath = logger.save();
       
       // Store result
-      results.push({
+      const modelResult: MultiStageModelResult = {
         modelId,
         modelName: getModelDisplayName(modelId),
         multiStageState: state,
@@ -152,7 +156,12 @@ async function runBenchmark(): Promise<void> {
         bossDefeated: state.bossDefeated,
         apiUsage,
         logFilePath: logPath,
-      });
+      };
+      
+      results.push(modelResult);
+      
+      // Update leaderboard in README
+      updateLeaderboard(modelResult);
       
       console.log(renderModelComplete(
         modelId, 

@@ -493,3 +493,49 @@ export function visualizeBoard(board: Board, stageName?: string): string {
   
   return lines.join('\n');
 }
+
+// ----------------------------------------------------------------------------
+// Board Visualization with Current Position (for model prompts)
+// ----------------------------------------------------------------------------
+
+/**
+ * Visualize board with current position marked with *
+ * e.g., if position is C4 with Math domain, shows *M* instead of  M 
+ */
+export function visualizeBoardWithPosition(board: Board, currentPosition: Coordinate): string {
+  const lines: string[] = [];
+  
+  lines.push('    A   B   C   D   E   F   G   H');
+  lines.push('  +---+---+---+---+---+---+---+---+');
+  
+  for (let row = 8; row >= 1; row--) {
+    let line = `${row} |`;
+    for (const col of COLUMNS) {
+      const coord = makeCoordinate(col, row as Row);
+      const square = board.squares.get(coord)!;
+      const isCurrentPosition = coord === currentPosition;
+      
+      let symbol: string;
+      switch (square.domain) {
+        case 'start': symbol = isCurrentPosition ? '*S*' : ' S '; break;
+        case 'goal': symbol = isCurrentPosition ? '*G*' : ' G '; break;
+        case 'void': symbol = ' X '; break;
+        case 'math': symbol = isCurrentPosition ? '*M*' : ' M '; break;
+        case 'physics': symbol = isCurrentPosition ? '*P*' : ' P '; break;
+        case 'code': symbol = isCurrentPosition ? '*C*' : ' C '; break;
+        case 'logic': symbol = isCurrentPosition ? '*L*' : ' L '; break;
+        case 'medicine': symbol = isCurrentPosition ? '*D*' : ' D '; break;
+        default: symbol = ' ? ';
+      }
+      line += symbol + '|';
+    }
+    lines.push(line);
+    lines.push('  +---+---+---+---+---+---+---+---+');
+  }
+  
+  lines.push('');
+  lines.push('Legend: S=Start, G=Goal, X=Void (impassable), M=Math, P=Physics, C=Code, L=Logic, D=Medicine');
+  lines.push('Your position is marked with * (e.g., *M* means you are on a Math square)');
+  
+  return lines.join('\n');
+}

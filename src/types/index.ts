@@ -19,6 +19,7 @@ export interface Square {
   tier: Tier | null;
   difficulty: number; // 1-10 scale
   questionId: string | null;
+  cachedQuestion?: Question; // Cached question to ensure uniqueness per square
 }
 
 export interface Board {
@@ -169,7 +170,7 @@ export interface BenchmarkResult {
 }
 
 // ----------------------------------------------------------------------------
-// Visible State (Fog of War)
+// Visible State (Fog of War) - DEPRECATED, kept for backwards compatibility
 // ----------------------------------------------------------------------------
 
 export interface VisibleNeighbor {
@@ -187,6 +188,22 @@ export interface VisibleState {
   distanceToGoal: number;
   stage: number;
   stageName: string;
+}
+
+// ----------------------------------------------------------------------------
+// Full Board State (No Fog of War)
+// ----------------------------------------------------------------------------
+
+export interface FullBoardState {
+  currentPosition: Coordinate;
+  lives: number;
+  turn: number;
+  availableAvatars: AvatarName[];
+  lastUsedAvatar: AvatarName | null;
+  distanceToGoal: number;
+  stage: number;
+  stageName: string;
+  boardLayout: string;  // ASCII representation of full board with position marked
 }
 
 // ----------------------------------------------------------------------------

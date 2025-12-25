@@ -24,24 +24,26 @@ import { visualizeBoard } from '../game/board.js';
 export class MultiStageLogger {
   private logPath: string;
   private buffer: string[] = [];
-  private modelId: string;
-  private baseSeed: number;
   
-  constructor(modelId: string, baseSeed: number, logsDir = 'logs') {
-    this.modelId = modelId;
-    this.baseSeed = baseSeed;
-    
-    // Create logs directory if it doesn't exist
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir, { recursive: true });
+  /**
+   * Create a new logger for a model run
+   * @param modelId - The model identifier
+   * @param baseSeed - The seed used for the run
+   * @param runTimestamp - The timestamp for this benchmark run (shared across all models)
+   * @param logsDir - Base logs directory (default: 'logs')
+   */
+  constructor(modelId: string, baseSeed: number, runTimestamp: string, logsDir = 'logs') {
+    // Create run-specific folder: logs/2025-12-24_21-39-39/
+    const runFolder = path.join(logsDir, runTimestamp);
+    if (!fs.existsSync(runFolder)) {
+      fs.mkdirSync(runFolder, { recursive: true });
     }
     
-    // Generate filename: model-name_seed_timestamp.log
+    // Simplified filename: model-name_seed.log (no timestamp since folder has it)
     const sanitizedModel = modelId.replace(/[/\\:*?"<>|]/g, '-');
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `${sanitizedModel}_${baseSeed}_${timestamp}.log`;
+    const filename = `${sanitizedModel}_${baseSeed}.log`;
     
-    this.logPath = path.join(logsDir, filename);
+    this.logPath = path.join(runFolder, filename);
   }
   
   // --------------------------------------------------------------------------
@@ -334,6 +336,26 @@ export class MultiStageLogger {
 // Factory Function
 // ----------------------------------------------------------------------------
 
-export function createMultiStageLogger(modelId: string, baseSeed: number): MultiStageLogger {
-  return new MultiStageLogger(modelId, baseSeed);
+export function createMultiStageLogger(
+  modelId: string, 
+  baseSeed: number, 
+  runTimestamp: string
+): MultiStageLogger {
+  return new MultiStageLogger(modelId, baseSeed, runTimestamp);
+}
+
+// ----------------------------------------------------------------------------
+// Generate Run Timestamp
+// ----------------------------------------------------------------------------
+
+/**
+ * Generate a timestamp string for the current benchmark run.
+ * Format: YYYY-MM-DD_HH-MM-SS
+ * Call this once at the start of a benchmark run and reuse for all models.
+ */
+export function generateRunTimestamp(): string {
+  return new Date().toISOString()
+    .replace(/[:.]/g, '-')
+    .replace('T', '_')
+    .slice(0, 19);  // "2025-12-24_21-39-39"
 }

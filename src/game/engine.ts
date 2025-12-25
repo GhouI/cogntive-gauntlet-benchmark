@@ -11,6 +11,7 @@ import type {
   ParsedMove,
   VisibleState,
   VisibleNeighbor,
+  FullBoardState,
   Question,
   Domain,
   APIUsage,
@@ -26,6 +27,7 @@ import {
   getAdjacentCoordinates,
   shortestPathDistance,
   isValidCoordinate,
+  visualizeBoardWithPosition,
 } from './board.js';
 
 import { 
@@ -45,6 +47,7 @@ import {
   sendMessage,
   buildMultiStageSystemPrompt,
   buildStageTurnPrompt,
+  buildFullBoardStageTurnPrompt,
   buildQuestionPrompt,
   buildBossFightPrompt,
   type Message,
@@ -114,7 +117,7 @@ export function initializeMultiStageGame(baseSeed: number): MultiStageGameState 
 }
 
 // ----------------------------------------------------------------------------
-// Visible State (Fog of War)
+// Visible State (Fog of War) - Legacy
 // ----------------------------------------------------------------------------
 
 export function getVisibleState(
@@ -158,6 +161,36 @@ export function getVisibleState(
     distanceToGoal,
     stage: stageNumber,
     stageName,
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Full Board State (No Fog of War)
+// ----------------------------------------------------------------------------
+
+export function getFullBoardState(
+  state: GameState, 
+  stageNumber: number, 
+  stageName: string
+): FullBoardState {
+  const distanceToGoal = shortestPathDistance(
+    state.currentPosition, 
+    GOAL, 
+    state.board.voids
+  );
+  
+  const boardLayout = visualizeBoardWithPosition(state.board, state.currentPosition);
+  
+  return {
+    currentPosition: state.currentPosition,
+    lives: state.lives,
+    turn: state.turn,
+    availableAvatars: getAvailableAvatars(state.lastUsedAvatar),
+    lastUsedAvatar: state.lastUsedAvatar,
+    distanceToGoal,
+    stage: stageNumber,
+    stageName,
+    boardLayout,
   };
 }
 
@@ -349,8 +382,10 @@ async function runSingleStage(
   while (!state.isComplete && state.turn < maxTurns && state.lives > 0) {
     state.turn++;
     const visibleState = getVisibleState(state, stageNumber, stage.name);
+    const fullBoardState = getFullBoardState(state, stageNumber, stage.name);
     
-    const turnPrompt = buildStageTurnPrompt(visibleState);
+    // Use full board prompt (no fog of war)
+    const turnPrompt = buildFullBoardStageTurnPrompt(fullBoardState);
     messages.push({ role: 'user', content: turnPrompt });
     
     logger.logTurnStart(state, visibleState);
@@ -456,8 +491,8 @@ async function runSingleStage(
       continue;
     }
     
-    // Get question
-    const question = getQuestionForSquare(targetSquare.domain as Domain);
+    // Get question (cached per square to ensure uniqueness)
+    const question = getQuestionForSquare(targetSquare);
     moveRecord.question = question;
     
     // Send question to model

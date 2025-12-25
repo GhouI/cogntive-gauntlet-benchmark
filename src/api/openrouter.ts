@@ -119,10 +119,15 @@ OBJECTIVE: Navigate from A1 to H8 while answering gatekeeper questions correctly
 
 RULES:
 1. You start at A1 with 5 lives. Reach H8 to win.
-2. Each square has a question. Answer correctly to occupy it.
+2. Each square has a question based on its category. Answer correctly to occupy it.
 3. Wrong answer: lose 1 life, stay on current square.
-4. Illegal move: lose 1 life, stay on current square.
+4. Illegal move (including moving to void squares): lose 1 life, stay on current square.
 5. Game over at 0 lives.
+
+BOARD LAYOUT:
+- You can see the FULL board with all categories and void squares (X).
+- Plan your path carefully to avoid voids and choose categories you're confident in.
+- Your current position is marked with * (e.g., *M* means you're on a Math square).
 
 AVATARS (movement types):
 - Vector: Move exactly 2 squares orthogonally (up, down, left, right)
@@ -137,8 +142,6 @@ COORDINATE SYSTEM:
 - Columns: A-H (left to right)
 - Rows: 1-8 (bottom to top)
 - A1 is bottom-left, H8 is top-right
-
-FOG OF WAR: You can only see the category of adjacent squares, not the questions.
 
 RESPONSE FORMAT: You MUST respond with valid JSON only:
 {
@@ -161,7 +164,7 @@ IMPORTANT: Your entire response must be valid JSON. Do not include any text befo
 // Build Turn Prompt
 // ----------------------------------------------------------------------------
 
-import type { VisibleState } from '../types/index.js';
+import type { VisibleState, FullBoardState } from '../types/index.js';
 
 export function buildTurnPrompt(state: VisibleState): string {
   const neighbors = state.visibleNeighbors
@@ -185,6 +188,30 @@ Visible Neighbors (category only):
 ${neighbors}
 
 Choose your move. Respond with JSON only.`;
+}
+
+// ----------------------------------------------------------------------------
+// Build Full Board Turn Prompt (No Fog of War)
+// ----------------------------------------------------------------------------
+
+export function buildFullBoardTurnPrompt(state: FullBoardState): string {
+  const avatars = state.availableAvatars.join(', ');
+  const cooldown = state.lastUsedAvatar 
+    ? `(${state.lastUsedAvatar} on cooldown)` 
+    : '(none on cooldown)';
+
+  return `TURN ${state.turn}
+
+Current Position: ${state.currentPosition}
+Lives: ${state.lives}/5
+Distance to Goal (H8): ${state.distanceToGoal} squares
+
+Available Avatars: ${avatars} ${cooldown}
+
+BOARD LAYOUT:
+${state.boardLayout}
+
+Plan your path to H8, avoiding X (void) squares. Choose your move. Respond with JSON only.`;
 }
 
 // ----------------------------------------------------------------------------
@@ -227,9 +254,14 @@ RULES:
 1. You have 5 lives total across ALL stages - lives carry over!
 2. Each square has an EXTREMELY HARD question (Tier 3 only). Answer correctly to occupy it.
 3. Wrong answer: lose 1 life, stay on current square.
-4. Illegal move: lose 1 life, stay on current square.
+4. Illegal move (including moving to void squares marked X): lose 1 life, stay on current square.
 5. Game over at 0 lives.
 6. Reach H8 to complete the stage and advance.
+
+BOARD VISIBILITY:
+- You can see the FULL board layout with all categories and void squares (X).
+- Your current position is marked with * (e.g., *M* means you're on a Math square).
+- Plan your path carefully to avoid voids and choose categories you're confident in.
 
 AVATARS (movement types):
 - Vector: Move exactly 2 squares orthogonally (up, down, left, right)
@@ -245,8 +277,6 @@ COORDINATE SYSTEM:
 - Rows: 1-8 (bottom to top)
 - A1 is bottom-left, H8 is top-right
 
-FOG OF WAR: You can only see the category of adjacent squares, not the questions.
-
 RESPONSE FORMAT: You MUST respond with valid JSON only:
 {
   "reasoning": "Your strategic thinking about the move",
@@ -258,7 +288,7 @@ IMPORTANT: Your entire response must be valid JSON. Do not include any text befo
 }
 
 // ----------------------------------------------------------------------------
-// Build Stage Turn Prompt
+// Build Stage Turn Prompt (Legacy - with fog of war)
 // ----------------------------------------------------------------------------
 
 export function buildStageTurnPrompt(state: VisibleState): string {
@@ -283,6 +313,30 @@ Visible Neighbors (category only):
 ${neighbors}
 
 Choose your move. Respond with JSON only.`;
+}
+
+// ----------------------------------------------------------------------------
+// Build Full Board Stage Turn Prompt (No Fog of War)
+// ----------------------------------------------------------------------------
+
+export function buildFullBoardStageTurnPrompt(state: FullBoardState): string {
+  const avatars = state.availableAvatars.join(', ');
+  const cooldown = state.lastUsedAvatar 
+    ? `(${state.lastUsedAvatar} on cooldown)` 
+    : '(none on cooldown)';
+
+  return `STAGE ${state.stage}/4 - "${state.stageName}" | TURN ${state.turn}
+
+Current Position: ${state.currentPosition}
+Lives: ${state.lives}/5 (carries over between stages!)
+Distance to Goal (H8): ${state.distanceToGoal} squares
+
+Available Avatars: ${avatars} ${cooldown}
+
+BOARD LAYOUT:
+${state.boardLayout}
+
+Plan your path to H8, avoiding X (void) squares. Choose your move. Respond with JSON only.`;
 }
 
 // ----------------------------------------------------------------------------
